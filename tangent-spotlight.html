@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tangent Spotlight Simulator</title>
+<style>
+  :root { color-scheme: light dark; --accent:#d97706; --blue:#2563eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:20px; font-family:system-ui,-apple-system,Segoe UI, sans-serif; background:Canvas; color:CanvasText; }
+  main { max-width:760px; margin:0 auto; }
+  .panel { border:1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius:16px; padding:18px; margin:14px 0; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  h1 { font-size:1.45rem; margin:0 0 8px; }
+  .angle { font-size:2rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; accent-color:var(--accent); margin:16px 0 4px; }
+  .range-labels { display:flex; justify-content:space-between; color:GrayText; font-size:.85rem; }
+  .controls { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:14px; }
+  button { border:1px solid color-mix(in srgb, CanvasText 25%, transparent); background:transparent; color:inherit; border-radius:9px; padding:9px 14px; font-size:.95rem; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  .visual-wrap { background:color-mix(in srgb, CanvasText 5%, Canvas); border-radius:12px; padding:8px; overflow:hidden; }
+  svg { display:block; width:100%; height:auto; }
+  .metrics { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .metric { background:color-mix(in srgb, CanvasText 6%, Canvas); border-radius:12px; padding:14px; min-width:0; }
+  .metric-label { color:GrayText; font-size:.85rem; }
+  .metric-value { font-size:clamp(1.05rem,3vw,1.45rem); font-weight:700; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+  .note { color:GrayText; font-size:.86rem; line-height:1.45; }
+  code { font-size:.95em; }
+  @media(max-width:480px) { body { padding:12px; } .panel { padding:13px; } .metrics { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tangent: The Spotlight and the Wall</h1>
+  <p class="note">Move the spotlight one degree at a time. The flashlight stays 1 meter from the wall.</p>
+
+  <section class="panel">
+    <div class="top">
+      <strong>Spotlight angle</strong>
+      <span class="angle" id="angleReadout">30°</span>
+    </div>
+    <input id="angle" type="range" min="-89" max="89" step="1" value="30" aria-label="Spotlight angle">
+    <div class="range-labels"><span>−90°</span><span>0°</span><span>+90°</span></div>
+    <div class="controls">
+      <button id="back" type="button">−1°</button>
+      <button id="forward" type="button">+1°</button>
+      <button id="reset" type="button">Reset to 0°</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="visual-wrap">
+      <svg id="diagram" viewBox="0 0 360 560" role="img" aria-label="Flashlight beam reaching a vertical wall">
+        <line x1="275" y1="15" x2="275" y2="535" stroke="#64748b" stroke-width="6"/>
+        <line x1="18" y1="275" x2="320" y2="275" stroke="currentColor" stroke-dasharray="5 5" opacity=".5"/>
+        <line id="beam" x1="65" y1="275" x2="275" y2="275" stroke="#d97706" stroke-width="3"/>
+        <circle cx="65" cy="275" r="7" fill="#2563eb"/>
+        <circle id="spot" cx="275" cy="275" r="6" fill="#d97706"/>
+        <line x1="65" y1="300" x2="275" y2="300" stroke="#64748b" stroke-width="1.2"/>
+        <path d="M65 295v10 M275 295v10" stroke="#64748b"/>
+        <text x="170" y="318" text-anchor="middle" fill="currentColor" font-size="12">1 meter</text>
+        <text x="65" y="340" text-anchor="middle" fill="currentColor" font-size="11">Flashlight</text>
+        <text x="275" y="552" text-anchor="middle" fill="currentColor" font-size="11">Vertical wall</text>
+        <text x="286" y="279" fill="currentColor" font-size="10">0</text>
+        <text x="286" y="23" fill="currentColor" font-size="10">+</text>
+        <text x="286" y="528" fill="currentColor" font-size="10">−</text>
+        <text id="spotLabel" x="286" y="265" fill="#d97706" font-size="10"></text>
+        <text id="angleLabel" x="83" y="263" fill="#d97706" font-size="12">30°</text>
+      </svg>
+    </div>
+    <p class="note">The wall is extended to make the movement near ±90° easier to see. The drawing is schematic rather than to scale; the numerical measurements use the exact tangent calculation.</p>
+  </section>
+
+  <section class="metrics">
+    <div class="metric">
+      <div class="metric-label">Signed distance along wall</div>
+      <div class="metric-value" id="distance">0.577350 m</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Change from previous degree</div>
+      <div class="metric-value" id="change">0.018… m</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <strong>Mathematical relationship</strong>
+    <p style="font-size:1.25rem;text-align:center;margin:12px 0"><i>d</i> = 1 × tan(θ)</p>
+    <p class="note">Positive distances are above the centerline; negative distances are below it. At exactly −90° and +90°, the beam is parallel to the wall, so there is no finite intersection. The slider stops at −89° and +89°.</p>
+  </section>
+</main>
+<script>
+(() => {
+  const slider = document.getElementById('angle');
+  const angleReadout = document.getElementById('angleReadout');
+  const distanceReadout = document.getElementById('distance');
+  const changeReadout = document.getElementById('change');
+  const beam = document.getElementById('beam');
+  const spot = document.getElementById('spot');
+  const spotLabel = document.getElementById('spotLabel');
+  const angleLabel = document.getElementById('angleLabel');
+  const back = document.getElementById('back');
+  const forward = document.getElementById('forward');
+
+  // One meter horizontally; vertical drawing scale is intentionally schematic
+  // so the ±57.29 m intersections at ±89° remain visible in the viewport.
+  const verticalPixelsPerMeter = 4.0;
+  const centerY = 275;
+
+  function update() {
+    const angle = Number(slider.value);
+    const radians = angle * Math.PI / 180;
+    const distance = Math.tan(radians); // wall is exactly 1 meter away
+    const previousDistance = Math.tan((angle - 1) * Math.PI / 180);
+    const change = distance - previousDistance;
+    const y = centerY - distance * verticalPixelsPerMeter;
+    const clippedY = Math.max(15, Math.min(535, y));
+
+    angleReadout.textContent = `${angle}°`;
+    distanceReadout.textContent = `${distance.toFixed(6)} m`;
+    changeReadout.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(6)} m`;
+    beam.setAttribute('x2', '275');
+    beam.setAttribute('y2', clippedY);
+    spot.setAttribute('cy', clippedY);
+    spotLabel.setAttribute('y', Math.max(28, Math.min(525, clippedY - 10)));
+    spotLabel.textContent = `${distance.toFixed(6)} m`;
+    angleLabel.textContent = `${angle}°`;
+    angleLabel.setAttribute('y', angle >= 0 ? '263' : '292');
+    back.disabled = angle <= -89;
+    forward.disabled = angle >= 89;
+  }
+
+  slider.addEventListener('input', update);
+  back.addEventListener('click', () => { slider.value = Math.max(-89, Number(slider.value) - 1); update(); });
+  forward.addEventListener('click', () => { slider.value = Math.min(89, Number(slider.value) + 1); update(); });
+  document.getElementById('reset').addEventListener('click', () => { slider.value = 0; update(); });
+  update();
+})();
+</script>
+</body>
+</html>
